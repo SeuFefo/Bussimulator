@@ -1,0 +1,556 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>City Bus Simulator</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 20px;
+  background: #091522;
+  color: #edf6ff;
+  font-family: system-ui, sans-serif;
+}
+button { touch-action: manipulation; }
+@media (max-width: 700px) {
+  body { padding: 0; }
+  .game { border-radius: 0; min-height: 100vh; }
+  header { padding: 12px; font-size: 14px; }
+  .stats { gap: 6px; padding: 7px; }
+  .stat { min-width: calc(50% - 6px); padding: 7px; }
+  .stat strong { font-size: 18px; }
+  .controls { padding: 10px; }
+  .scene { overflow: hidden; }
+  #quizBox { top: 2%; right: 2%; width: 96%; max-height: 72%; overflow-y: auto; }
+  #overlay { position: absolute; }
+}
+.game {
+  max-width: 900px;
+  margin: auto;
+  overflow: hidden;
+  border: 1px solid #29465e;
+  border-radius: 16px;
+  background: #102238;
+}
+header {
+  padding: 16px;
+  background: linear-gradient(100deg,#102a43,#102034);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px;
+}
+.stat {
+  flex: 1;
+  min-width: 100px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #19334b;
+}
+.stat small { color: #a5c1d9; }
+.stat strong { display: block; font-size: 22px; }
+canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px;
+}
+button {
+  cursor: pointer;
+  border: 0;
+  border-radius: 9px;
+  padding: 11px 15px;
+  font-weight: bold;
+}
+.primary { background: #1688e8; color: white; }
+.secondary { background: #193e59; color: white; }
+#quizBox, #overlay {
+  display: none;
+  position: absolute;
+  z-index: 2;
+}
+#quizBox {
+  right: 3%; top: 3%;
+  width: min(350px, 89%);
+  padding: 14px;
+  background: #0c2037f5;
+  border: 1px solid #46aef8;
+  border-radius: 14px;
+}
+#answers { display: grid; gap: 7px; }
+#answers button {
+  background: #193753;
+  color: white;
+  border: 1px solid #416b8b;
+  text-align: left;
+}
+#overlay {
+  inset: 0;
+  background: #071321ef;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+}
+#overlay > div {
+  max-width: 350px;
+  background: #19344e;
+  border: 1px solid #456780;
+  border-radius: 17px;
+  padding: 22px;
+}
+.scene { position: relative; }
+#mobile-controls {
+  display: none;
+}
+@media (pointer: coarse), (max-width: 700px) {
+  #mobile-controls {
+    display: flex;
+    position: fixed;
+    z-index: 20;
+    left: 0;
+    right: 0;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    padding: 0 12px;
+    justify-content: space-between;
+    align-items: flex-end;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .mobile-group { display: flex; gap: 8px; pointer-events: auto; }
+  .mobile-group.pedals { flex-direction: column; }
+  .mobile-btn {
+    width: 58px; height: 58px; padding: 0;
+    border: 2px solid #ffffffb8; border-radius: 16px;
+    background: #14283de8; color: white; font-size: 25px;
+    box-shadow: 0 4px 12px #0006;
+    touch-action: none; -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-btn.accelerate { background: #16864aee; }
+  .mobile-btn.brake { background: #c93636ee; }
+  .mobile-btn.pressed { filter: brightness(1.35); transform: scale(.95); }
+  body { padding-bottom: 8px; }
+}
+@media (max-width: 380px) {
+  .mobile-btn { width: 51px; height: 51px; }
+}
+</style>
+</head>
+<body>
+<div class="game">
+<header>
+  <div><b>🚌 CITY BUS</b><br><small>Linha 302 · Centro</small></div>
+  <div id="status">● PRONTO PARA PARTIR</div>
+</header>
+
+<div class="stats">
+  <div class="stat"><small>Pontuação</small><strong>⭐ <span id="score">0</span></strong></div>
+  <div class="stat"><small>Velocidade</small><strong><span id="speed">0</span> <small>km/h</small></strong></div>
+  <div class="stat"><small>Passageiros</small><strong>♙ <span id="people">0</span></strong></div>
+  <div class="stat"><small>Velocidade máxima</small><strong>80 <small>km/h</small></strong></div>
+</div>
+
+<div class="scene">
+<canvas id="canvas" width="900" height="510"></canvas>
+
+<div id="quizBox">
+  <div style="display:flex;justify-content:space-between;color:#8bd1ff;font-size:12px;font-weight:bold">
+    <span>DESAFIO DE TRÂNSITO</span><span id="clock">01:00</span>
+  </div>
+  <div id="question" style="font-size:16px;font-weight:bold;margin:12px 0"></div>
+  <div id="answers"></div>
+</div>
+
+<div id="overlay">
+  <div>
+    <div id="endIcon" style="font-size:43px">💥</div>
+    <h2 id="endTitle">Fim da viagem</h2>
+    <p id="endText"></p>
+    <p>Pontuação final: <b id="finalScore">0</b></p>
+    <button class="primary" onclick="resetGame()">↻ Jogar novamente</button>
+  </div>
+</div>
+
+<div id="toast" style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);width:max-content;max-width:90%;background:#0b1b2def;border:1px solid #456782;border-radius:9px;padding:9px 13px;text-align:center;font-size:12px">
+  Use as setas ou WASD para dirigir.
+</div>
+</div>
+
+<div class="controls">
+  <div style="font-size:12px;line-height:1.8;color:#b4cadc">
+    ↑ acelerar · ↓ frear<br>
+    ← → virar · WASD também funciona
+  </div>
+  <button id="start" class="primary" onclick="resetGame()">▶ Iniciar viagem</button>
+</div>
+<div id="mobile-controls" aria-label="Controles para celular">
+  <div class="mobile-group">
+    <button type="button" class="mobile-btn steer" data-key="ArrowLeft" aria-label="Virar à esquerda">◀</button>
+    <button type="button" class="mobile-btn steer" data-key="ArrowRight" aria-label="Virar à direita">▶</button>
+  </div>
+  <div class="mobile-group pedals">
+    <button type="button" class="mobile-btn accelerate" data-key="ArrowUp" aria-label="Acelerar">▲</button>
+    <button type="button" class="mobile-btn brake" data-key="ArrowDown" aria-label="Frear">▼</button>
+  </div>
+</div>
+<div style="padding:0 14px 14px;font-size:11px;color:#8daac2">
+Solte o acelerador para desacelerar naturalmente. Colisões encerram a viagem.
+Embarque a até 20 km/h.
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const W=900,H=510,L=165,R=735;
+
+const questions = [
+['Ao se aproximar de uma faixa de pedestres sem semáforo, você deve:',
+ ['Acelerar para passar primeiro.','Dar preferência ao pedestre que estiver atravessando.','Buzinar e manter a velocidade.'],1],
+['Uma ambulância se aproxima com sirene e luzes ligadas. Você deve:',
+ ['Facilitar a passagem com segurança.','Disputar espaço com ela.','Parar bruscamente no meio da via.'],0],
+['Antes de mudar de faixa, é necessário:',
+ ['Virar sem olhar.','Sinalizar e verificar se é seguro.','Acelerar sem sinalizar.'],1],
+['Em pista molhada, você deve:',
+ ['Aumentar a velocidade.','Frear bruscamente a todo momento.','Reduzir a velocidade e aumentar a distância.'],2],
+['Usar o celular segurando-o enquanto dirige é:',
+ ['Permitido em baixa velocidade.','Uma infração de trânsito.','Permitido em ruas vazias.'],1],
+['Ao encontrar uma placa de PARE, você deve:',
+ ['Parar e verificar o trânsito.','Apenas buzinar.','Seguir se estiver com pressa.'],0],
+['O cinto de segurança deve ser usado:',
+ ['Só em rodovias.','Só à noite.','Durante todo o deslocamento.'],2],
+['Ao se aproximar de uma parada de ônibus, você deve:',
+ ['Fazer a manobra com atenção e sinalizar.','Parar sem observar.','Acelerar perto dos passageiros.'],0],
+['Manter distância do veículo à frente permite:',
+ ['Dirigir mais rápido.','Ter tempo para reagir e frear.','Impedir ultrapassagens.'],1],
+['Ao perceber perigo à frente, você deve:',
+ ['Ignorar se estiver na velocidade permitida.','Buzinar e continuar.','Reduzir a velocidade e agir com segurança.'],2]
+];
+
+let active=false, world=0, speed=0, busX=450;
+let score=0, people=0, stops=[], cars=[], keys={};
+let questionActive=false, qnum=0, timeLeft=60, last=0, spawn=0;
+let trees=[], clouds=[], buildings=[];
+
+function initPreviewScene(){
+  trees=Array.from({length:40},(_,i)=>({
+    x:i%2?Math.random()*145:755+Math.random()*145,
+    y:Math.random()*700,r:12+Math.random()*10
+  }));
+  clouds=Array.from({length:8},(_,i)=>({
+    x:i*135+Math.random()*50,y:20+Math.random()*85,
+    r:18+Math.random()*18
+  }));
+  buildings=Array.from({length:26},(_,i)=>({
+    x:i*37,y:100+Math.random()*55,w:24+Math.random()*22,
+    h:45+Math.random()*70,
+    col:['#9cb4c2','#c3d0d5','#e2d9c9','#849eaf'][i%4]
+  }));
+}
+
+function resetGame(){
+  active=true; world=0; speed=0; busX=450;
+  score=0; people=0; questionActive=false; qnum=0;
+  timeLeft=60; spawn=0; keys={};
+  stops=[{d:850,done:false}];
+  trees=Array.from({length:40},(_,i)=>({
+    x:i%2?Math.random()*145:755+Math.random()*145,
+    y:Math.random()*700,r:12+Math.random()*10
+  }));
+  clouds=Array.from({length:8},(_,i)=>({
+    x:i*135+Math.random()*50,y:20+Math.random()*85,
+    r:18+Math.random()*18
+  }));
+  buildings=Array.from({length:26},(_,i)=>({
+    x:i*37,y:100+Math.random()*55,w:24+Math.random()*22,
+    h:45+Math.random()*70,
+    col:['#9cb4c2','#c3d0d5','#e2d9c9','#849eaf'][i%4]
+  }));
+  cars=[];
+  for(let i=0;i<6;i++) cars.push({
+    x:[260,390,520,640][i%4],d:220+i*245,
+    v:17+Math.random()*13,
+    color:['#e84c4c','#e4e9ed','#e8b342','#488ddd','#4fba91'][i%5]
+  });
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('quizBox').style.display='none';
+  document.getElementById('status').textContent='EM VIAGEM';
+  document.getElementById('start').textContent='Viagem em andamento';
+  document.getElementById('toast').textContent='Dirija com cuidado e evite os outros veículos.';
+  last=performance.now();
+  requestAnimationFrame(loop);
+}
+
+function endGame(title,desc,icon='💥'){
+  if(!active)return;
+  active=false; questionActive=false;
+  document.getElementById('quizBox').style.display='none';
+  document.getElementById('endTitle').textContent=title;
+  document.getElementById('endText').textContent=desc;
+  document.getElementById('endIcon').textContent=icon;
+  document.getElementById('finalScore').textContent=score;
+  document.getElementById('overlay').style.display='flex';
+  document.getElementById('status').textContent='VIAGEM ENCERRADA';
+  document.getElementById('start').textContent='▶ Nova viagem';
+}
+function hud(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('speed').textContent=Math.round(speed);
+  document.getElementById('people').textContent=people;
+}
+function rounded(x,y,w,h,r,col){
+  ctx.fillStyle=col;
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x,y,w,h,r);
+  } else {
+    const rr=Math.min(r,w/2,h/2);
+    ctx.moveTo(x+rr,y);
+    ctx.arcTo(x+w,y,x+w,y+h,rr);
+    ctx.arcTo(x+w,y+h,x,y+h,rr);
+    ctx.arcTo(x,y+h,x,y,rr);
+    ctx.arcTo(x,y,x+w,y,rr);
+  }
+  ctx.fill();
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  let sky=ctx.createLinearGradient(0,0,0,260);
+  sky.addColorStop(0,'#3298df');sky.addColorStop(.6,'#9ad5f0');sky.addColorStop(1,'#e4f2ef');
+  ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+
+  clouds.forEach(cl=>{
+    let x=((cl.x+world*.05)%1050+1050)%1050-70;
+    ctx.fillStyle='#ffffffb8';ctx.beginPath();
+    ctx.arc(x,cl.y,cl.r,0,7);
+    ctx.arc(x+cl.r*.8,cl.y-8,cl.r*.8,0,7);
+    ctx.arc(x+cl.r*1.5,cl.y,cl.r*.7,0,7);ctx.fill();
+  });
+
+  buildings.forEach(b=>{
+    let x=((b.x-world*.07)%1050+1050)%1050-70;
+    ctx.fillStyle='#8aa5b1';ctx.fillRect(x,b.y,b.w,b.h);
+    ctx.fillStyle=b.col;ctx.fillRect(x+2,b.y+2,b.w-4,b.h-2);
+    for(let yy=b.y+8;yy<b.y+b.h-5;yy+=13)
+      for(let xx=x+5;xx<x+b.w-3;xx+=10){
+        ctx.fillStyle=(Math.floor(xx+yy)%3?'#d8eff5':'#65899e');
+        ctx.fillRect(xx,yy,5,7);
+      }
+  });
+
+  ctx.fillStyle='#78ad79';ctx.fillRect(0,155,W,355);
+  ctx.fillStyle='#d7d7c8';ctx.fillRect(L-24,0,24,H);ctx.fillRect(R,0,24,H);
+  ctx.fillStyle='#b3c5c6';
+  for(let y=-30+(world*.7%35);y<H;y+=35){
+    ctx.fillRect(L-23,y,22,2);ctx.fillRect(R+1,y,22,2);
+  }
+  ctx.fillStyle='#414950';ctx.fillRect(L,0,R-L,H);
+  ctx.fillStyle='#f5e8ae';ctx.fillRect(L+5,0,3,H);ctx.fillRect(R-8,0,3,H);
+  let off=(world*1.8)%78;
+  ctx.fillStyle='#e5e9e6';
+  for(let y=-78+off;y<H;y+=78){
+    ctx.fillRect(L+(R-L)/3-3,y,6,38);
+    ctx.fillRect(L+2*(R-L)/3-3,y,6,38);
+  }
+
+  trees.forEach(t=>{
+    let y=((t.y+world*.5)%690+690)%690-100;
+    ctx.fillStyle='#69513b';ctx.fillRect(t.x-4,y,8,27);
+    ctx.fillStyle='#216c43';ctx.beginPath();ctx.arc(t.x,y,t.r,0,7);ctx.fill();
+    ctx.fillStyle='#36985c';ctx.beginPath();ctx.arc(t.x-7,y-7,t.r*.65,0,7);ctx.fill();
+    ctx.fillStyle='#70b86b';ctx.beginPath();ctx.arc(t.x+6,y-4,t.r*.4,0,7);ctx.fill();
+  });
+
+  stops.forEach(s=>{
+    if(s.done)return;
+    let y=380-(s.d-world)*.45;
+    if(y>-60&&y<H+50){
+      rounded(R+24,y-35,91,44,4,'#d8e7eb');
+      rounded(R+20,y-43,99,8,3,'#1686c9');
+      rounded(R+38,y-27,59,27,2,'#397fa3');
+      ctx.fillStyle='#edfaff';ctx.fillRect(R+44,y-22,19,16);
+      ctx.fillStyle='#334454';ctx.fillRect(R+50,y+8,4,24);
+      for(let i=0;i<3;i++){
+        ctx.fillStyle=['#d58a5b','#458bd2','#d4b96b'][i];
+        ctx.fillRect(R+42+i*18,y-3,8,16);
+        ctx.fillStyle='#e4b998';ctx.beginPath();ctx.arc(R+46+i*18,y-8,5,0,7);ctx.fill();
+      }
+      ctx.fillStyle='#0e2a41';ctx.font='bold 12px system-ui';ctx.textAlign='center';
+      ctx.fillText('PARADA',R+68,y-49);
+    }
+  });
+
+  cars.forEach(a=>{
+    let y=380-(a.d-world)*.45;if(y<-65||y>H+50)return;
+    ctx.fillStyle='#17212b55';ctx.beginPath();ctx.ellipse(a.x,y+15,27,35,0,0,7);ctx.fill();
+    rounded(a.x-22,y-30,44,62,8,'#1d252d');
+    rounded(a.x-19,y-28,38,57,6,a.color);
+    rounded(a.x-14,y-21,28,16,4,'#b6d8e4');
+    ctx.fillStyle='#f3f2dc';ctx.fillRect(a.x-15,y+19,9,5);ctx.fillRect(a.x+6,y+19,9,5);
+    ctx.fillStyle='#242b31';ctx.fillRect(a.x-25,y-16,5,14);ctx.fillRect(a.x+20,y-16,5,14);
+    ctx.fillStyle='#ff5b51';ctx.fillRect(a.x-15,y+24,8,3);ctx.fillRect(a.x+7,y+24,8,3);
+  });
+
+  ctx.fillStyle='#111a2466';ctx.beginPath();ctx.ellipse(busX,456,43,11,0,0,7);ctx.fill();
+  rounded(busX-35,335,70,125,9,'#17212a');
+  rounded(busX-31,338,62,116,8,'#f3b62c');
+  rounded(busX-26,345,52,34,4,'#176e9d');
+  rounded(busX-22,350,44,23,3,'#b8dce9');
+  rounded(busX-26,385,52,40,4,'#e4a61f');
+  rounded(busX-21,390,42,30,3,'#34434d');
+  ctx.fillStyle='#fff1ae';ctx.fillRect(busX-26,431,10,7);ctx.fillRect(busX+16,431,10,7);
+  ctx.fillStyle='#263039';ctx.fillRect(busX-38,363,7,24);ctx.fillRect(busX+31,363,7,24);
+  ctx.fillStyle='#fff';ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.fillText('302',busX,412);
+
+  rounded(14,14,236,58,12,'#0b1d30df');
+  ctx.textAlign='left';ctx.fillStyle='#94d3ff';ctx.font='bold 11px system-ui';
+  ctx.fillText('LINHA 302 / CENTRO',27,35);
+  ctx.fillStyle='#fff';ctx.font='bold 17px system-ui';ctx.fillText('SIMULADOR URBANO',27,57);
+  rounded(748,14,137,58,12,'#0b1d30df');
+  ctx.fillStyle='#94d3ff';ctx.font='bold 11px system-ui';ctx.textAlign='center';
+  ctx.fillText('VELOCIDADE',816,35);ctx.fillStyle='#fff';ctx.font='bold 21px system-ui';
+  ctx.fillText(Math.round(speed)+' km/h',816,58);
+}
+
+function openQuestion(){
+  questionActive=true;timeLeft=60;
+  document.getElementById('quizBox').style.display='block';
+  const q=questions[qnum%questions.length];
+  document.getElementById('question').textContent=(qnum+1)+'. '+q[0];
+  document.getElementById('clock').textContent='01:00';
+  const answers=document.getElementById('answers');answers.innerHTML='';
+  q[1].forEach((a,i)=>{
+    const b=document.createElement('button');
+    b.textContent=String.fromCharCode(65+i)+'. '+a;
+    b.onclick=()=>{
+      if(!questionActive)return;
+      if(i!==q[2]){
+        endGame('Resposta incorreta','A resposta errada encerrou a viagem.','⚠️');return;
+      }
+      score+=50;qnum++;questionActive=false;
+      document.getElementById('quizBox').style.display='none';
+      const s=stops.find(s=>!s.done);if(s)s.done=true;
+      people+=3;score+=30;stops.push({d:world+1250,done:false});
+      document.getElementById('toast').textContent='Resposta correta! +50 pontos e +30 pelo embarque.';
+      hud();
+    };
+    answers.appendChild(b);
+  });
+}
+
+function loop(now){
+  if(!active)return;
+  let dt=Math.min((now-last)/16.67,2);last=now;
+
+  if(questionActive){
+    timeLeft-=dt/60;
+    if(timeLeft<=0){endGame('Tempo esgotado','Você não respondeu dentro dos 60 segundos.','⏱️');return;}
+    document.getElementById('clock').textContent='00:'+String(Math.ceil(timeLeft)).padStart(2,'0');
+  }else{
+    const up=keys.ArrowUp||keys.w||keys.W;
+    const down=keys.ArrowDown||keys.s||keys.S;
+
+    // Limite máximo de 80 km/h e desaceleração gradual.
+    if(up)speed=Math.min(80,speed+0.30*dt);
+    else speed=Math.max(0,speed-0.065*dt);
+    if(down)speed=Math.max(0,speed-0.8*dt);
+
+    if(keys.ArrowLeft||keys.a||keys.A)busX-=3.3*dt;
+    if(keys.ArrowRight||keys.d||keys.D)busX+=3.3*dt;
+    busX=Math.max(L+43,Math.min(R-43,busX));
+    world+=speed*.22*dt;
+
+    spawn+=dt;
+    if(spawn>145){
+      spawn=0;
+      cars.push({x:[L+90,L+215,L+350,L+470][Math.floor(Math.random()*4)],
+        d:world+700+Math.random()*450,v:18+Math.random()*13,
+        color:['#e84c4c','#e4e9ed','#e8b342','#488ddd'][Math.floor(Math.random()*4)]});
+    }
+    cars.forEach(a=>a.d+=a.v*.10*dt);
+    cars=cars.filter(a=>a.d>world-200&&a.d<world+1400);
+
+    for(const a of cars){
+      const cy=380-(a.d-world)*.45;
+      if(cy>322&&cy<457&&Math.abs(a.x-busX)<53){
+        endGame('COLISÃO!','Você bateu em outro veículo. A viagem falhou.','💥');return;
+      }
+    }
+
+    const s=stops.find(s=>!s.done);
+    if(s){
+      const sy=380-(s.d-world)*.45;
+      const aligned=busX>R-105&&busX<R-35;
+      const close=Math.abs(sy-380)<34;
+      if(aligned&&close&&speed<=20){
+        openQuestion();people+=3;score+=30;hud();
+      }else if(sy>470){
+        endGame('Parada perdida','Você passou da parada sem embarcar os passageiros.','🛑');return;
+      }
+      if(Math.abs(sy-380)<85&&speed>20)
+        document.getElementById('toast').textContent='Reduza para até 20 km/h para embarcar.';
+    }
+    hud();
+  }
+  draw();requestAnimationFrame(loop);
+}
+
+document.addEventListener('keydown',e=>{
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();
+  keys[e.key]=true;
+});
+document.addEventListener('keyup',e=>keys[e.key]=false);
+
+// Controles táteis: mantêm a tecla pressionada enquanto o dedo estiver no botão.
+document.querySelectorAll('#mobile-controls [data-key]').forEach(button => {
+  const key = button.dataset.key;
+  const release = (event) => {
+    if (event) event.preventDefault();
+    keys[key] = false;
+    button.classList.remove('pressed');
+  };
+  button.addEventListener('pointerdown', event => {
+    event.preventDefault();
+    try { button.setPointerCapture(event.pointerId); } catch (_) {}
+    keys[key] = true;
+    button.classList.add('pressed');
+  });
+  button.addEventListener('pointerup', release);
+  button.addEventListener('pointercancel', release);
+  button.addEventListener('lostpointercapture', release);
+  button.addEventListener('contextmenu', event => event.preventDefault());
+});
+function releaseMobileKeys(){
+  document.querySelectorAll('#mobile-controls [data-key]').forEach(button => {
+    keys[button.dataset.key] = false;
+    button.classList.remove('pressed');
+  });
+}
+window.addEventListener('blur', releaseMobileKeys);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) releaseMobileKeys();
+});
+
+// Prepara o cenário inicial e desenha a tela antes de começar a viagem.
+initPreviewScene();
+draw();
+</script>
+</body>
+</html>
